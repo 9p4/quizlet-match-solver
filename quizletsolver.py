@@ -42,7 +42,8 @@ while True:
             card_data[card].click()
             card_data[match].click()
             print("Found match ", card, ", ", match)
-        except KeyError:
+        except:
+            print("Card skipped (for now)")
             pass
     input("Press enter to run another set, press ^C or whatever to quit")
 driver.close()
