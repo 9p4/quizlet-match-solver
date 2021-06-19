@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::io;
 use std::io::prelude::*;
-use thirtyfour_sync::prelude::*;
+use thirtyfour::prelude::*;
+use tokio;
 
 fn pause(msg: &str) {
     let mut stdin = io::stdin();
@@ -15,29 +16,35 @@ fn pause(msg: &str) {
     let _ = stdin.read(&mut [0u8]).unwrap();
 }
 
-fn scan(driver: &WebDriver) -> WebDriverResult<HashMap<String, String>> {
-    let terms = driver.find_elements(By::Css("[aria-label='Term']"))?;
+async fn scan(driver: &WebDriver) -> WebDriverResult<HashMap<String, String>> {
+    let terms = driver.find_elements(By::Css("[aria-label='Term']")).await?;
     let mut term_data = HashMap::new();
     for term in terms {
-        let values = term.find_elements(By::ClassName("TermText"))?;
-        term_data.insert(values[0].text()?, values[1].text()?);
+        let values = term.find_elements(By::ClassName("TermText")).await?;
+        term_data.insert(values[0].text().await?, values[1].text().await?);
     }
     Ok(term_data)
 }
 
-fn play(driver: &WebDriver, term_data: &HashMap<String, String>) -> WebDriverResult<()> {
+async fn play(driver: &WebDriver, term_data: &HashMap<String, String>) -> WebDriverResult<()> {
     driver
-        .find_element(By::Css("[aria-label='Start game']"))?
-        .click()?;
+        .find_element(By::Css("[aria-label='Start game']"))
+        .await?
+        .click()
+        .await?;
     println!("Starting!");
     println!("Looking for cards...");
-    let cards = driver.find_elements(By::ClassName("MatchModeQuestionGridTile"))?;
+    let cards = driver
+        .find_elements(By::ClassName("MatchModeQuestionGridTile"))
+        .await?;
     let mut card_data: HashMap<String, WebElement> = HashMap::new();
     for card in &cards {
         println!("Adding card...");
         card_data.insert(
-            card.find_element(By::ClassName("MatchModeQuestionGridTile-text"))?
-                .get_attribute("aria-label")?
+            card.find_element(By::ClassName("MatchModeQuestionGridTile-text"))
+                .await?
+                .get_attribute("aria-label")
+                .await?
                 .unwrap(),
             card.clone(),
         );
@@ -45,22 +52,23 @@ fn play(driver: &WebDriver, term_data: &HashMap<String, String>) -> WebDriverRes
     for (card_key, _) in &card_data {
         println!("Card key {}", card_key);
         if term_data.contains_key(card_key) {
-            card_data[card_key].click()?;
-            card_data[&term_data[card_key]].click()?;
+            card_data[card_key].click().await?;
+            card_data[&term_data[card_key]].click().await?;
         }
     }
     Ok(())
 }
 
-fn main() -> WebDriverResult<()> {
+#[tokio::main]
+async fn main() -> WebDriverResult<()> {
     let caps = DesiredCapabilities::firefox();
-    let driver = WebDriver::new("http://localhost:4444", &caps)?;
-    driver.get("https://quizlet.com")?;
+    let driver = WebDriver::new("http://localhost:4444", &caps).await?;
+    driver.get("https://quizlet.com").await?;
     pause("Press enter when you've logged in and opened the Quizlet set. You may need to scroll down to load all the terms.");
-    let term_data = scan(&driver)?;
+    let term_data = scan(&driver).await?;
     println!("Found {} terms", term_data.len());
     pause("Press enter when the match game has loaded (do not start it yet! This program will do that for you)");
-    play(&driver, &term_data)?;
+    play(&driver, &term_data).await?;
     pause("Completed!");
     Ok(())
 }
